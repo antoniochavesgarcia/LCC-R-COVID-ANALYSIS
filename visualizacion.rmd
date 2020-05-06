@@ -1,0 +1,60 @@
+---
+title: "Visualización de casos de COVID-19 y que hubiera ocurrido si no hubiese habido confinamiento"
+author: "Antonio. J. Chaves | Ruben García | Sergio Infante | Rafael López"
+date: "8/4/2020"
+output:
+  prettydoc::html_pretty:
+    theme: tactile
+    highlight: github
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(magrittr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+# Importar el dataset
+Covid19 <- read.csv(url("https://covid19.isciii.es/resources/serie_historica_acumulados.csv"))
+```
+
+# Ya tenemos el dataset que vamos a estudiar, a continuación vamos a darle un poco de formato
+
+```{r format}
+# Eliminar filas sin fecha
+Covid19 <- filter(Covid19, FECHA != "" | is.na(FECHA))
+# Reemplazar campos numericos vacios por 0
+Covid19 <- Covid19 %>% mutate(FECHA = as.Date(FECHA, format="%d/%m/%Y")) %>%
+ mutate(CASOS = replace_na(CASOS, 0), 
+        Hospitalizados = replace_na(Hospitalizados, 0), 
+        UCI = replace_na(UCI, 0), 
+        Fallecidos = replace_na(Fallecidos, 0)
+        )
+
+# DATASET AGRUPADO
+Covid19G <- Covid19 %>%
+  group_by(FECHA) %>%
+  summarise(CASOS = sum(CASOS), 
+            Hospitalizados = sum(Hospitalizados, UCI = sum(UCI)), 
+            Fallecidos = sum(Fallecidos)) %>%
+  arrange(FECHA)
+Covid19G <- Covid19G %>% mutate(FechaNum = as.numeric(FECHA))
+```
+
+# A continuación, vamos a generar la predicción de casos en el supuesto de que no hubiese habido confinamiento:
+
+```{r predict}
+# PREDICCION EXPONENCIAL
+Modelo.Casos <- Covid19G$CASOS
+Modelo.FechaNum <- Covid19G$FechaNum
+Modelo.Exponencial <- lm(log(Modelo.Casos)~ Modelo.FechaNum)
+Modelo.Estimacion <- exp(predict(Modelo.Exponencial, list(Modelo.FechaNum = Modelo.FechaNum)))
+```
+
+# Ahora vamos a cruzar esta información que tenemos para generar la gráfica:
+
+```{r grafica}
+ggplot(Covid19G) +
+  geom_point(aes(x = FECHA, y = CASOS)) +
+  geom_point(aes(x = FECHA, y = Modelo.Estimacion), color="red")
+```
