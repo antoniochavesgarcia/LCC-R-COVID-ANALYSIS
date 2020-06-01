@@ -1,0 +1,95 @@
+---
+title: "Regresión COVID"
+author: "Sergio Infante Paredes"
+date: sys.date()
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(datarium)
+library(dplyr)
+library(magrittr)
+library(ggplot2)
+library(GGally)
+library(readr)
+
+library(readr)
+covid <- read_csv("owid-covid-data.csv")
+```
+
+Lo primero que hacemos es limpiar el dataset para quedarnos con los datos que mas nos interesan, en este caso vamos a hacerlo en España
+```{r codigo}
+covid <- filter(covid, location=="Spain")
+covid$tests_units <- NULL
+covid$new_tests_per_thousand <- NULL
+covid$new_tests <- NULL
+covid$total_tests <- NULL
+covid$total_tests_per_thousand <- NULL
+covid$iso_code <- NULL
+covid$location <- NULL
+covid$total_cases_per_million <- NULL
+covid$total_deaths_per_million <- NULL
+covid$new_cases_per_million <- NULL
+covid$new_deaths_per_million <- NULL
+
+
+covid <- covid %>%                    
+  group_by(date) %>%                      
+  summarise_at(vars(total_cases, total_deaths, new_cases, new_deaths),
+               list(name = sum))
+
+colnames(covid) <- c("Fecha", "Casos_Totales", "Casos_Nuevos", "Muertes_Totales", "Muertes_nuevas")
+```
+
+Vamos a hacer un modelo de los casos totales a traves del tiempo:
+```{r}
+plotcovid <- covid %>% ggplot(aes(x=Fecha, y=Casos_Totales))+geom_point()
+plotcovid
+#Como vemos, estamos ante la famosa curva de contagios del covid, vemos como en un principio tenia un crecimiento practicamente exponencial, mientras que llegando a finales de la grafica va calmandose el ritmo de casos totales por covid.
+
+mFechaCasos <- lm(covid$Casos_Totales~covid$Fecha, data=covid)
+mFechaCasos
+
+summary(mFechaCasos)
+
+#¿Hay modelo? Dado que tenemos p-value = 2,2*10^-16, que es menor que 0,005, suponemos que H0 es falso, por lo que H1 seria cierto, es decir, hay modelo.
+#Tembien tenemos que tiene un R^2 de 0,68, por lo que tenemos un modelo que sin ser perfecto es bueno.
+#Tambien podemos ver que la diferencia entre R2 y R2 ajustado es casi imperceptible, por lo que no esta sobrecargado.
+#Por ultimo podemos ver que nuestros coeficientes son bastante significativos, ya que cada uno tiene 3 estrellas.
+
+
+plot(mFechaCasos)
+#En el grafico de los residuos vemos que al principio si se adapta bien, aunque cuando va alejandose deja de adaptarse bien a la linea, esto se debe a que como empezo el confinamiento, la curva vario de una forma que no era la tendencia.
+#Vemos tambien en el QQplot que podemos tener varios outliers en la parte superior derecha de la grafica y en la inferior izquierda.
+```
+
+Otro modelo que podemos hacer es el de muertes y casos totales:
+
+```{r}
+plotcovid <- covid %>% ggplot(aes(x=Casos_Totales, y=Muertes_Totales))+geom_point()
+plotcovid
+#Como vemos, esta gráfica muestra como la mayoria de muertes ocurrieron cuando comenzo el colapso en el sistema sanitario que fue sobre los 100000 casos y baja en los extremos que fue cuando estaba empezando y en estos momentos.
+
+mCasosMuertes <- lm(covid$Muertes_Totales~covid$Casos_Totales, data=covid)
+mCasosMuertes
+
+summary(mCasosMuertes)
+
+#Dado que tenemos p-value = 3,49*10^-10, que es menor que 0,005, suponemos que H0 es falso, por lo que H1 seria cierto, es decir, aqui tambien hay modelo.
+#Tembien tenemos que tiene un R^2 de 0,269, por lo que o no tenemos un buen modelo o los datos no son buenos.
+#Tambien podemos ver que la diferencia entre R2 y R2 ajustado es muy baja, por lo que no esta sobrecargado.
+#Por ultimo podemos ver que nuestros coeficientes son bastante significativos, ya que cada uno tiene 3 estrellas.
+
+plot(mCasosMuertes)
+#En este caso vemos como tampoco los residuos se ajustan a 0 y en el qqplot vemos que existen outliers en los extremos.
+
+mCasosMuertes2 <- lm(covid$Muertes_Totales~covid$Casos_Totales+I((covid$Casos_Totales)^2), data=covid)
+summary(mCasosMuertes2)
+#Ahora vemos como el R^2 es de 0.87 lo que significa que tenemos un modelo muchos mejor, el valor de p-value sigue siendo pequeño y los coeficientes siguen siendo significativos.
+
+plot(mCasosMuertes2)
+#En este caso los residuos se acercan un poco mas a 0, pero no mucho ya que siguen teniendo una dispersion muy grande.
+```
+
